@@ -180,7 +180,7 @@ class vertice_modifier:
     def contact_generator(self):
         """
         this method is designed to export useable vertices from all the generated ones in modelling
-        tools like GemPy. representative_points is another import output of this method.
+        tools like GemPy. representative_points is another output of this method.
         This array can help GMSH to assign correct names to each part of your model.
         """
         if self.no_of_faults == 0: # Without any fault, the life is much easier.
@@ -190,34 +190,48 @@ class vertice_modifier:
             vers = [list(column) for column in zip(*self.all_vers)]
             leng = np.array ([])
             representative_points = np.array([])
-            for layers in vers:
-                for layer_iter in layers:
-                    nums, counts = np.unique(layer_iter[:,0],return_counts=True)
-                    to_remove_x = layer_iter[counts[np.searchsorted(nums, layer_iter[:, 0])] < 3]
-                    remov_ind_x = np.where(np.isin(layer_iter,to_remove_x).all(-1)==True)
-                    cleaned_X = np.delete(layer_iter, (remov_ind_x[0]), axis = 0) # remove redundant points in X-grid
-                    nums, counts = np.unique(cleaned_X[:,1],return_counts=True)
-                    to_remove_y = cleaned_X[counts[np.searchsorted(nums, cleaned_X[:, 1])] < 3]
-                    remov_ind_y = np.where(np.isin(cleaned_X,to_remove_y).all(-1)==True)
-                    cleaned_Y = np.delete(cleaned_X, (remov_ind_y[0]), axis = 0) # remove redundant points in Y-grid
-                    sor = cleaned_Y[np.lexsort((cleaned_Y[:,0],cleaned_Y[:,1]))]
-                    leng = np.append (leng, len (sor))
-                    cleaned_verti = np.append (cleaned_verti, sor)
-                    meds = sor[len(sor)//2]
-                    representative_points = np.append(representative_points, meds)
+            for layer_iter in vers:
+                layer_iter = layer_iter[0]
+                print(len(layer_iter))
+                nums, counts = np.unique(layer_iter[:,0],return_counts=True)
+                to_remove_x = layer_iter[counts[np.searchsorted(nums, layer_iter[:, 0])] < 3]#if there are intermediate points with less than thrree occurences
+                remov_ind_x = np.where(np.isin(layer_iter,to_remove_x).all(-1)==True)
+                cleaned_X = np.delete(layer_iter, (remov_ind_x[0]), axis = 0) # remove redundant points in X-grid
+
+
+                nums, counts = np.unique(cleaned_X[:,1],return_counts=True)
+                to_remove_y = cleaned_X[counts[np.searchsorted(nums, cleaned_X[:, 1])] < 3]
+                remov_ind_y = np.where(np.isin(cleaned_X,to_remove_y).all(-1)==True)
+                cleaned_Y = np.delete(cleaned_X, (remov_ind_y[0]), axis = 0) # remove redundant points in Y-grid
+
+
+                sor = cleaned_Y[np.lexsort((cleaned_Y[:,0],cleaned_Y[:,1]))]
+                leng = np.append (leng, len(sor))
+                cleaned_verti = np.append(cleaned_verti,sor)
+                cleaned_verti = cleaned_verti.reshape(-1,3)
+                #medz = cleaned_verti[len(cleaned_verti)//2][-1]
+                medx = (np.max(cleaned_Y[:,0]) - np.min(cleaned_Y[:,0]))//2
+                medy = (np.max(cleaned_Y[:,1]) - np.min(cleaned_Y[:,1]))//2
+                medzi = np.where((cleaned_Y[:,0] == medx) & (cleaned_Y[:,1] == medy+2))[0][0] #look for Z that has the middle coordinate
+                medz = cleaned_Y[medzi][-1]
+                meds = np.array([medx,medy,medz])
+                representative_points = np.append(representative_points, meds)
             cleaned_verti = cleaned_verti.reshape(-1,3)
-            length_layers = leng.reshape(self.n_iterations,-1)
-            cleaned_ver = np.split (cleaned_verti, (np.cumsum(np.cumsum(length_layers,axis=1)[:,-1])).astype('int'))[:-1]
+            length_layers = leng.reshape(self.n_iterations,-1) #reshaping to match the no of iterations 
+            cleaned_ver = np.split(cleaned_verti, (np.cumsum(np.cumsum(length_layers,axis=1)[:,-1])).astype('int'))[:-1]
             new_result_list = [l.tolist() for l in cleaned_ver]
-            representative_po = representative_points.reshape(self.n_iterations,-1,3)
+            representative_po = representative_points.reshape(self.n_iterations,-1,3) #reshaping to match the no of iterations 
             representative_p = deepcopy(representative_po)
-            representative_p[:,:,-1] += self.z_resolution
+            representative_p[:,:,-1] += self.z_resolution #adds the z_resolution to the z-coordinate
+
             rep_points = np.concatenate((representative_p, representative_p[:,-1:,:]), axis=1)
             rep_points[:,-1,-1] -= (self.z_resolution*2)
             rep_points = np.concatenate(rep_points)
             names = np.tile (self.formations,self.n_iterations).reshape(-1,1)
             repre_pts = np.hstack([rep_points, names]).reshape(self.n_iterations,-1,4).tolist()
             return (new_result_list, length_layers, repre_pts)
+    
+        
         else: # with faults calculations are more intense
             faults =self.all_vers[:self.no_of_faults-len(self.passive_F)]
             faults = [list(column) for column in zip(*faults)]
